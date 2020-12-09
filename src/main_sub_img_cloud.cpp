@@ -15,7 +15,7 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/io/io.h>
-#include <sophus/se3.h>
+#include <sophus/se3.hpp>
 #include <ros/ros.h>
 #include <ros/package.h>
 #include <sensor_msgs/CameraInfo.h>

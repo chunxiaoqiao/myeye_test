@@ -256,8 +256,7 @@ void pose_estimation_2d2d(std::vector<KeyPoint> keypoints_1,
     //-- 从本质矩阵中恢复旋转和平移信息.
     // 此函数仅在Opencv3中提供
     recoverPose(essential_matrix, points1, points2, R, t, focal_length, principal_point);
-    cout << "R is " << endl << R << endl;
+    cout << "R   is " << endl << R << endl;
     cout << "t is " << endl << t << endl;
-
 }
 

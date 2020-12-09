@@ -23,19 +23,46 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/Imu.h>
 #include <chrono>
+#include <mutex>
+
 
 #include <thread>
 MYNTEYE_USE_NAMESPACE
 sensor_msgs::Imu        imu_msg;
+std::shared_ptr<mynteye::ImuData> imu;
+ros::Publisher imu_pub;
+
+int imuflag = 0 ;
+std::mutex mtxFlag;
+int i=1;
 void imu_ros_pub();
+
+//void process()
+//{
+//    while(1)
+//    {
+//        //printf("in press %d\n",imuflag);
+//        std::unique_lock<std::mutex>(mtxFlag);
+//        if(imuflag)
+//        {
+//            imu_pub.publish(imu_msg);
+//            printf("pub_imu,%d\n",imu_msg.header.stamp.nsec);
+//            imuflag=0;
+//        }
+//
+//        std::this_thread::sleep_for(std::chrono::microseconds(1));
+////        sleep(0.0001);
+//    }
+//}
+
 int main(int argc, char *argv[]) {
     clock_t start,end;
     ros::init (argc, argv, "public_ros");
-    ros::NodeHandle nh;
-    ros::Publisher img_pub_left = nh.advertise<sensor_msgs::Image> ("/cam0/image_raw", 1);
-    ros::Publisher img_pub_right = nh.advertise<sensor_msgs::Image> ("img_out/right", 1);
-    ros::Publisher imu_pub      =nh.advertise<sensor_msgs::Imu>("/imu0",1);
-    ros::Publisher img_pub_left_and_right = nh.advertise<sensor_msgs::Image> ("img_out/left_and_right", 1);
+    ros::NodeHandle n;
+    ros::Publisher img_pub_left = n.advertise<sensor_msgs::Image> ("img_out/left", 100);
+    ros::Publisher img_pub_right = n.advertise<sensor_msgs::Image> ("img_out/right", 100);
+                    imu_pub      =n.advertise<sensor_msgs::Imu>("/imu0",100);
+    ros::Publisher img_pub_left_and_right = n.advertise<sensor_msgs::Image> ("img_out/left_and_right", 100);
     sensor_msgs::ImagePtr img_msg_left;
     sensor_msgs::ImagePtr img_msg_right;
     sensor_msgs::ImagePtr img_msg_left_and_right;
@@ -50,7 +77,7 @@ int main(int argc, char *argv[]) {
 //    api->SetOptionValue(Option::IR_CONTROL, 80);
     // Get motion data from callback
     std::atomic_uint imu_count(0);
-    std::shared_ptr<mynteye::ImuData> imu;
+
     std::mutex imu_mtx;
     api->SetMotionCallback(
             [&imu_count, &imu, &imu_mtx](const api::MotionData &data) {
@@ -60,16 +87,20 @@ int main(int argc, char *argv[]) {
                     std::lock_guard<std::mutex> _(imu_mtx);
                     imu = data.imu;
                 }
-//                imu_msg.header.frame_id="odom";
-//                imu_msg.header.stamp.nsec=imu->timestamp%1000000*1000;
-//                imu_msg.header.stamp.sec=imu->timestamp/1000/1000;
-//                imu_msg.linear_acceleration.x=imu->accel[0];
-//                imu_msg.linear_acceleration.y=imu->accel[1];
-//                imu_msg.linear_acceleration.z=imu->accel[2];
-//                imu_msg.angular_velocity.x=imu->gyro[0];
-//                imu_msg.angular_velocity.y=imu->gyro[1];
-//                imu_msg.angular_velocity.z=imu->gyro[2];
-                 LOG(INFO) << "Imu count: " << imu_count;
+                imu_msg.header.frame_id="odom";
+                imu_msg.header.stamp.nsec=imu->timestamp%1000000*1000;
+                imu_msg.header.stamp.sec=imu->timestamp/1000/1000;
+                imu_msg.linear_acceleration.x=imu->accel[0];
+                imu_msg.linear_acceleration.y=imu->accel[1];
+                imu_msg.linear_acceleration.z=imu->accel[2];
+                imu_msg.angular_velocity.x=imu->gyro[0];
+                imu_msg.angular_velocity.y=imu->gyro[1];
+                imu_msg.angular_velocity.z=imu->gyro[2];
+//                mtxFlag.lock();
+//                imuflag=1;
+                imu_pub.publish(imu_msg);
+                 LOG(INFO) << "Imu count: " << imu_count<<"   imuflag"<<imuflag;
+//                mtxFlag.unlock();
 //                 LOG(INFO) << "  frame_id: " << data.imu->frame_id
 //                           << ", timestamp: " << data.imu->timestamp
 //                           << ", accel_x: " << data.imu->accel[0]
@@ -81,7 +112,10 @@ int main(int argc, char *argv[]) {
 //                           << ", temperature: " << data.imu->temperature;
             });
     api->Start(Source::ALL);
+//    std::thread imu_process(process);
+//    imu_process.join();
     while (true) {
+       // printf("imuflag %d\n",imuflag);
         start=clock();
         api->WaitForStreams();
         end=clock();
@@ -111,41 +145,41 @@ int main(int argc, char *argv[]) {
         img_msg_left_and_right->header.stamp.nsec  =img_stamp%1000000*1000;
         img_msg_left_and_right->header.stamp.sec   =img_stamp/1000/1000;
 
-        if (imu) {  //从callback读数据
-            std::lock_guard<std::mutex> _(imu_mtx);
-            std::cout<<"imu="<<imu->timestamp<<std::endl;
-            imu_msg.header.frame_id="odom";
-            imu_msg.header.stamp.nsec=imu->timestamp%1000000*1000;
-            imu_msg.header.stamp.sec=imu->timestamp/1000/1000;
-            imu_msg.linear_acceleration.x=imu->accel[0];
-            imu_msg.linear_acceleration.y=imu->accel[1];
-            imu_msg.linear_acceleration.z=imu->accel[2];
-            imu_msg.angular_velocity.x=imu->gyro[0];
-            imu_msg.angular_velocity.y=imu->gyro[1];
-            imu_msg.angular_velocity.z=imu->gyro[2];
-        }
-        std::cout<<"img="<<img_stamp<<std::endl;
+//        if (imu) {  //从callback读数据
+//            std::lock_guard<std::mutex> _(imu_mtx);
+//            std::cout<<"imu="<<imu->timestamp<<std::endl;
+//            imu_msg.header.frame_id="odom";
+//            imu_msg.header.stamp.nsec=imu->timestamp%1000000*1000;
+//            imu_msg.header.stamp.sec=imu->timestamp/1000/1000;
+//            imu_msg.linear_acceleration.x=imu->accel[0];
+//            imu_msg.linear_acceleration.y=imu->accel[1];
+//            imu_msg.linear_acceleration.z=imu->accel[2];
+//            imu_msg.angular_velocity.x=imu->gyro[0];
+//            imu_msg.angular_velocity.y=imu->gyro[1];
+//            imu_msg.angular_velocity.z=imu->gyro[2];
+//        }
+        //std::cout<<"img="<<img_stamp<<std::endl;
         if (ros::ok())//发布ROS消息
         {
-            std::cout<<"ros ok"<<std::endl;
+            //std::cout<<"ros ok"<<std::endl;
             img_pub_left.publish(img_msg_left);
             img_pub_right.publish(img_msg_right);
             img_pub_left_and_right.publish(img_msg_left_and_right);
-            ros::spinOnce();
+            //ros::spinOnce();
 //            loop_rate.sleep();
         }
-        if (ros::ok())//发布ROS消息
-        {
-            imu_pub.publish(imu_msg);
-            ros::spinOnce();
-        }
+//        if (ros::ok())//发布ROS消息
+//        {
+//            imu_pub.publish(imu_msg);
+//            ros::spinOnce();
+//        }
         char key = static_cast<char>(cv::waitKey(1));
         if (key == 27 || key == 'q' || key == 'Q') {  // ESC/Q
             break;
         }
 
 //        printf("time_cost=%d us,  %dms   ",end-start,(end-start)/1000);
-        std::cout<<left_data.frame.size<<std::endl;
+        //std::cout<<left_data.frame.size<<std::endl;
     }
     api->Stop(Source::VIDEO_STREAMING);
     return 0;
